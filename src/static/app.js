@@ -10,8 +10,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const response = await fetch("/activities");
       const activities = await response.json();
 
-      // Clear loading message
+      // Clear existing activity UI and options
       activitiesList.innerHTML = "";
+      activitySelect.innerHTML = "<option value=\"\">-- Select an activity --</option>";
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -19,13 +20,43 @@ document.addEventListener("DOMContentLoaded", () => {
         activityCard.className = "activity-card";
 
         const spotsLeft = details.max_participants - details.participants.length;
-
         activityCard.innerHTML = `
           <h4>${name}</h4>
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          <div class="participants">
+            <strong>Participants</strong>
+          </div>
         `;
+
+        const participantsDiv = activityCard.querySelector(".participants");
+
+        if (details.participants.length) {
+          const list = document.createElement("ul");
+          details.participants.forEach((participant) => {
+            const listItem = document.createElement("li");
+            const participantName = document.createElement("span");
+            participantName.textContent = participant;
+
+            const removeButton = document.createElement("button");
+            removeButton.type = "button";
+            removeButton.className = "delete-participant";
+            removeButton.dataset.activity = name;
+            removeButton.dataset.email = participant;
+            removeButton.setAttribute("aria-label", `Remove ${participant}`);
+            removeButton.textContent = "×";
+
+            listItem.append(participantName, removeButton);
+            list.appendChild(listItem);
+          });
+          participantsDiv.appendChild(list);
+        } else {
+          const emptyParagraph = document.createElement("p");
+          emptyParagraph.className = "no-participants";
+          emptyParagraph.textContent = "No participants yet.";
+          participantsDiv.appendChild(emptyParagraph);
+        }
 
         activitiesList.appendChild(activityCard);
 
@@ -62,6 +93,7 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        await fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
@@ -79,6 +111,43 @@ document.addEventListener("DOMContentLoaded", () => {
       messageDiv.classList.remove("hidden");
       console.error("Error signing up:", error);
     }
+  });
+
+  // Handle participant removal
+  activitiesList.addEventListener("click", async (event) => {
+    const button = event.target.closest(".delete-participant");
+    if (!button) return;
+
+    const activity = button.dataset.activity;
+    const email = button.dataset.email;
+
+    try {
+      const response = await fetch(
+        `/activities/${encodeURIComponent(activity)}/participants?email=${encodeURIComponent(email)}`,
+        {
+          method: "DELETE",
+        }
+      );
+      const result = await response.json();
+
+      if (response.ok) {
+        messageDiv.textContent = result.message;
+        messageDiv.className = "success";
+        await fetchActivities();
+      } else {
+        messageDiv.textContent = result.detail || "Unable to remove participant.";
+        messageDiv.className = "error";
+      }
+    } catch (error) {
+      messageDiv.textContent = "Failed to remove participant. Please try again.";
+      messageDiv.className = "error";
+      console.error("Error removing participant:", error);
+    }
+
+    messageDiv.classList.remove("hidden");
+    setTimeout(() => {
+      messageDiv.classList.add("hidden");
+    }, 5000);
   });
 
   // Initialize app
